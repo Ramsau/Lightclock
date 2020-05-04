@@ -1,7 +1,7 @@
 int antennaSignal = A1;
 unsigned char sig = 0;
 unsigned long lastTimestamp = 0, now = 0, dTime = 0, startLastReading = 0, lastTimeInc = 0;
-const int sigLength = 70; // how many measure points to take to reduce low/high blips by taking average
+const int sigLength = 5; // how many measure points to take to reduce low/high blips by taking average
 bool buffer = false, sigArray[sigLength];
 int data[60], position = 0;
 
@@ -14,8 +14,13 @@ float ledBrightness = 0.5;
 bool hasParsedTime = false;
 int timeParsed[] = {0, 0}, timeNow[] = {0, 0}; // hours, minutes
 
+char debugMode = 2; // options: 0-> nothing, 1-> text, 2-> plot
+
 
 void setup() {
+  if (debugMode != 0){
+    Serial.begin(9600);
+  }
   pinMode(antennaSignal, INPUT);
   pinMode(LED_BUILTIN, OUTPUT);
   testClusters();
@@ -27,16 +32,20 @@ void setup() {
 }
 
 void loop(){
+  now = millis();
   sig = analogRead(antennaSignal);
-  sig -= 100;
-  pushSig(sig > 100);
+
+  if (debugMode == 2){
+    Serial.println(sig);
+  }
+  
+  pushSig(sig < 100);
   bool sigBool = getSig();
 
   // show signal on debugging light
   digitalWrite(LED_BUILTIN, sigBool);
 
   if(buffer != sigBool)  {
-    now = millis();
     dTime = now - lastTimestamp;
     lastTimestamp = now;
     if (sigBool) { // step up
@@ -46,8 +55,15 @@ void loop(){
       }
     }
     else{  // step down
-      int dataBit = dTime > 100 ? 1 : 0;  // bit length
+      int dataBit = dTime > 150 ? 1 : 0;  // bit length
       data[position] = dataBit;
+
+      if (debugMode == 1){
+        Serial.print(position);
+        Serial.print("->");
+        Serial.println(dataBit);
+      }
+      
       if (position == 58){ // the 59th (zero-based : 58) stepdown is the last one; calc time here
         parseData();
         position = -1; // because it gets incremented right afer
@@ -81,8 +97,17 @@ void parseData(){ // multiply / add up all the relevant bits to calculate time
       hasParsedTime = true;
       startLastReading = millis();
     }
+    if (debugMode == 1){
+      Serial.print("parse:");
+      Serial.print(hoursParsed);
+      Serial.print(":");
+      Serial.println(minsParsed);
+    }
   }
   else {
+    if (debugMode == 1){
+      Serial.println("parity fail");
+    }
   }
 }
 
@@ -116,6 +141,15 @@ void incrementTime(unsigned long currentMillis){ // increment time from last kno
   
     timeNow[0] = (timeParsed[0] + minsNow / 60) % 24;
     timeNow[1] = minsNow % 60;
+
+    if (debugMode == 1){
+      Serial.print("mins since:");
+      Serial.println(minsSinceParse);
+      Serial.print("timeNow:");
+      Serial.print(timeNow[0]);
+      Serial.print(":");
+      Serial.println(timeNow[1]);
+    }
   }
 }
 
